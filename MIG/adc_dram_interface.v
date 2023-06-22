@@ -59,22 +59,45 @@ module ADC_IN_AXIS_OUT_DRAM_INTERFACE #(
         output wire [APP_DATA_WIDTH-1:0]               o_data,
         output wire                              o_data_valid,
 
-        // AXIS read interface
-        input wire i_axis_en;   // 1: axis bus send the data. 0:  
+    // AXI read interface
+        input wire S_AXI_ACLK,
+        input wire S_AXI_ARESETN,
+        //AR adress read channel
+        input  wire [ADDR_WIDTH-1:0]     S_AXI_ARADDR , // address(each byte)
+        input  wire                      S_AXI_ARVALID,
+        output wire                      S_AXI_ARREADY, 
+        input wire [7:0]        S_AXI_ARLEN   , // burst length. 1-255. Actual Num is + 1. ex) S_AXI_ARLEN = 20 : 21 data is tranported.  
+        input wire [2:0]        S_AXI_ARSIZE  , // data length. 000:1byte, 001:2byte, 010:4byte, 011:8byte, 100:16byte, 101:32byte, 110:64byte, 111:128byte.  => Mostly 4byte(32bit) which is the same as bus width.
+        input wire [1:0]        S_AXI_ARBURST , // burst type. 00:Fixed address, 01:Incriment address, 10:WRAP, 11:Reserved.
+        input wire [ID_LENGTH-1:0]              S_AXI_ARID    , // ID for out of order transaction
+        //R data read channel
+        output wire [RDATA_WIDTH-1:0]   S_AXI_RDATA ,
+        output wire                     S_AXI_RVALID,
+        input wire                      S_AXI_RREADY,
+        output wire                     S_AXI_RLAST , // last data
+        output wire [ID_LENGTH-1:0]     S_AXI_RID   , // ID for out of order transaction
+        //AW adress write channel
+        input wire [ADDR_WIDTH-1:0]     S_AXI_AWADDR ,
+        input wire                      S_AXI_AWVALID,
+        output wire                     S_AXI_AWREADY,
+        input wire [7:0]                S_AXI_AWLEN   , // burst length 
+        input wire [2:0]                S_AXI_AWSIZE  , // data length 
+        input wire [1:0]                S_AXI_AWBRST , // burst type
+        // W data write channel
+        input  wire [WDATA_WIDTH-1:0]       S_AXI_WDATA ,
+        input  wire                         S_AXI_WVALID,
+        output wire                         S_AXI_WREADY,
+        input  wire                         S_AXI_WLAST ,
+        // B (Responce for W channel)
+        output wire                 S_AXI_BVALID,
+        input  wire                 S_AXI_BREADY,
+        output wire [1:0]           S_AXI_BRESP ,   //00:OKAY, 01:EXOKEY, 10:SLVERR, 11:DECERR
 
-        input wire M_AXIS_ACLK,
-        input wire M_AXIS_ARESETN,
-
-        output wire[AXIS_DATA_WIDTH-1:0]    M_AXIS_TDATA,
-        output wire                         M_AXIS_TVALID,
-        input  wire                         M_AXIS_TREADY,
-        // output wire M_AXIS_STRB,  // not required
-        output wire                         M_AXIS_TLAST, // not necessary. Need to be L?
 
     // ADC write interface
     // Physical and PL interface
-    input wire [ADC_DATA_WIDTH-1:0]     i_adc_data,
-    input wire                          i_adc_data_en);
+        input wire [ADC_DATA_WIDTH-1:0]     i_adc_data,
+        input wire                          i_adc_data_en);
 
 
     localparam DRAM_CMD_FIFO_DATA_WIDTH = 1 + (APP_ADDR_WIDTH - 1) + APP_DATA_WIDTH + APP_MASK_WIDTH; // {i_wen, i_addr, i_data, i_mask}
@@ -182,6 +205,55 @@ module ADC_IN_AXIS_OUT_DRAM_INTERFACE #(
     endgenerate
    
 
+   S_AXI_CONVERSION #(
+                    .WDATA_WIDTH  (32)   ,
+                    .RDATA_WIDTH  (32)   ,
+                    .ADDR_WIDTH   (8 )   ,   // ADDR_DEPTH = 2**ADDR_WIDTH
+                    .BURST_LENGTH (8 )   ,   // 2**8 = 256 is Max burst length. Burst transaction for AXI is up to 256. 
+                    .ID_LENGTH    (4 )   ,
+                    .BUFF_DEPTH   (10)   )
+    s_axi_conversion (
+    // AXI Interface
+                    .S_AXI_ACLK   (S_AXI_ACLK   )      ,
+                    .S_AXI_ARESETN(S_AXI_ARESETN)      ,
+        
+        //AR adress read channel
+                    .S_AXI_ARADDR  (S_AXI_ARADDR ) , // address(each byte)
+                    .S_AXI_ARVALID (S_AXI_ARVALID) ,
+                    .S_AXI_ARREADY (S_AXI_ARREADY) , 
+                    .S_AXI_ARLEN   (S_AXI_ARLEN   ), // burst length. 1-255. Actual Num is + 1. ex) S_AXI_ARLEN = 20 : 21 data is tranported.  
+                    .S_AXI_ARSIZE  (S_AXI_ARSIZE  ), // data length. 000:1byte, 001:2byte, 010:4byte, 011:8byte, 100:16byte, 101:32byte, 110:64byte, 111:128byte.  => Mostly 4byte(32bit) which is the same as bus width.
+                    .S_AXI_ARBURST (S_AXI_ARBURST ), // burst type. 00:Fixed address, 01:Incriment address, 10:WRAP, 11:Reserved.
+                    .S_AXI_ARID    (S_AXI_ARID    ), // ID for out of order transaction
+        //R data read channel
+                    .S_AXI_RDATA (S_AXI_RDATA ),
+                    .S_AXI_RVALID(S_AXI_RVALID),
+                    .S_AXI_RREADY(S_AXI_RREADY),
+                    .S_AXI_RLAST (S_AXI_RLAST ), // last data
+                    .S_AXI_RID   (S_AXI_RID   ), // ID for out of order transaction
+        //AW adress write channel
+                    .S_AXI_AWADDR (S_AXI_AWADDR ),
+                    .S_AXI_AWVALID(S_AXI_AWVALID),
+                    .S_AXI_AWREADY(S_AXI_AWREADY),
+                    .S_AXI_AWLEN  (S_AXI_AWLEN  ), // burst length 
+                    .S_AXI_AWSIZE (S_AXI_AWSIZE ), // data length 
+                    .S_AXI_AWBRST (S_AXI_AWBRST ), // burst type
+        // W data write channel
+                    .S_AXI_WDATA (S_AXI_WDATA ),
+                    .S_AXI_WVALID(S_AXI_WVALID),
+                    .S_AXI_WREADY(S_AXI_WREADY),
+                    .S_AXI_WLAST (S_AXI_WLAST ),
+        // B (Responce for W channel)
+                    .S_AXI_BVALID(S_AXI_BVALID),
+                    .S_AXI_BREADY(S_AXI_BREADY),
+                    .S_AXI_BRESP (S_AXI_BRESP ),   //00:OKAY, 01:EXOKEY, 10:SLVERR, 11:DECERR
+    // User Interface (Modify by yourself depends on the application.)
+                    .ADDRESS_FROM_AXI(adc_axi_addr),
+                    .DATA_TO_AXI     (data_to_axi),
+                    .DATA_VALID      (),
+                    .DATA_READY      (axi_read_ready), 
+                    .BURST_NUM       (axi_burst_num));
+
 
     // rst_async 0 at stable status.  Stable conditoin made then one clock later, Write FIFO starts accepting data. 1 clock gap is for safety of transaction. 
     // locked = 1 (clock is stable), mig_ui_rst = 0 (mig is not reset)  
@@ -203,24 +275,59 @@ module ADC_IN_AXIS_OUT_DRAM_INTERFACE #(
     assign wen_afifo2 = ren_sfifo;
     assign din_afifo2 = dout_sfifo;
     // assign ren_afifo2 = (!empty_afifo2 &&  !i_busy);
-    reg [AXIS_DATA_WIDTH-1:0] axis_dataout;
+    // reg [AXIS_DATA_WIDTH-1:0] axis_dataout;
     
-    assign M_AXIS_TDATA  = axis_dataout;
-    assign M_AXIS_TVALID = !mig_ui_rst;
-    assign M_AXIS_TLAST  = mig_ui_rst;
-    assign ren_afifo2    = !empty_afifo2 & !mig_ui_rst & M_AXIS_TREADY & M_AXIS_ARESETN;
+    // assign M_AXIS_TDATA  = axis_dataout;
+    // assign M_AXIS_TVALID = !mig_ui_rst;
+    // assign M_AXIS_TLAST  = mig_ui_rst;
+    // assign ren_afifo2    = !empty_afifo2 & !mig_ui_rst & M_AXIS_TREADY & M_AXIS_ARESETN;
 
-    always @(posedge M_AXIS_ACLK) begin
-        if(!M_AXIS_ARESETN)begin
-            axis_dataout <= 0;
+    // always @(posedge M_AXIS_ACLK) begin
+    //     if(!M_AXIS_ARESETN)begin
+    //         axis_dataout <= 0;
+    //     end else begin
+    //         if(M_AXIS_TREADY)begin
+    //             axis_dataout <= dout_afifo2;
+    //         end
+    //     end       
+    // end
+
+    wire [32-1:0]data_to_axi;
+    wire axi_burst_num;
+    wire axi_read_ready;
+    assign dram_wen = axi_read_ready; // When axi reads DRAM, ADC write is disabled. 
+    
+
+    wire [32-1:0] burst_data0;
+    wire [32-1:0] burst_data1;
+    wire [32-1:0] burst_data2;
+    wire [32-1:0] burst_data3;
+    assign burst_data0 = tmp_data_to_axi[31:0];
+    assign burst_data1 = tmp_data_to_axi[63:32];
+    assign burst_data2 = tmp_data_to_axi[95:64];
+    assign burst_data3 = tmp_data_to_axi[127:96];
+
+    reg [7:0] burst_cnt;
+    reg [APP_DATA_WIDTH-1:0] tmp_data_to_axi;
+
+    always @(posedge S_AXI_ACLK) begin
+        if(!S_AXI_ARESETN)begin
+            burst_cnt <= 0;
         end else begin
-            if(M_AXIS_TREADY)begin
-                axis_dataout <= dout_afifo2;
+            if(axi_read_ready && burst_cnt == 0)begin
+                tmp_data_to_axi <= dout_afifo2;
             end
-        end       
+
+            if(axi_read_ready)begin
+                if(0 < burst_cnt < axi_burst_num )
+                    burst_cnt <= burst_cnt + 1;
+                end else if (burst_cnt == axi_burst_num) begin
+                    burst_cnt <= 0;
+                end
+            end
     end
 
-    
+    assign ren_afifo2 = axi_read_ready;
 
     FIFO_ASYNC #(
         .DATA_WIDTH(DRAM_CMD_FIFO_DATA_WIDTH),
@@ -232,7 +339,7 @@ module ADC_IN_AXIS_OUT_DRAM_INTERFACE #(
         .data_in(din_afifo2),
         .empty(empty_afifo2),
 
-        .read_clk(M_AXIS_ACLK),
+        .read_clk(S_AXI_ACLK),
         .read_rst(mig_ui_rst),
         .read_en(ren_afifo2),
         .data_out(dout_afifo2),
@@ -282,8 +389,8 @@ module ADC_IN_AXIS_OUT_DRAM_INTERFACE #(
     wire                                    adc_clk;                    // input clock through clock wizard or clk buffer.
     wire                                    adc_merged_clk;             // clock for deserialized data
     wire [APP_DATA_WIDTH-1:0]               adc_data_merged;            // desirialized data
-    // wire [DDR3_ADDR_WIDTH-1:0]              adc_addr_wire;
-    reg  [DDR3_ADDR_WIDTH-1:0]              adc_addr;                   // DRAM address to write ADC data. 
+    reg  [DDR3_ADDR_WIDTH-1:0]              adc_axi_addr;                   // DRAM address to write ADC data. 
+    reg                                     adc_write_en;
     // wire [APP_DATA_WIDTH-1:0]               adc_merged_mask_wire;
     reg  [APP_MASK_WIDTH-1:0]               adc_merged_mask;            // Write mask when you write ADC data to DRAM. no mask is default.               
 
@@ -312,11 +419,11 @@ module ADC_IN_AXIS_OUT_DRAM_INTERFACE #(
         .o_clk(adc_merged_clk));
 
     // generate ADC address. Just incriment in ascending order
-    always @(posedge adc_merged_clk ) begin
-        if(dram_wen) adc_addr <= adc_addr + DDR3_BURST_LENGTH;
+    always @(posedge adc_merged_clk) begin
+        if(dram_wen) adc_axi_addr <= adc_axi_addr + DDR3_BURST_LENGTH;
     end
     
-    assign dout_afifo1_addr = adc_addr; 
+    assign dout_afifo1_addr = adc_axi_addr; 
 
     FIFO_ASYNC #(
         .DATA_WIDTH( 1 + APP_DATA_WIDTH + ),
@@ -337,7 +444,7 @@ module ADC_IN_AXIS_OUT_DRAM_INTERFACE #(
     
     // assign {dout_afifo1_adc_wen, dout_afifo1_adc_data} = dout_afifo1; // Divide afifo1 out data 
     assign dram_wen     = (!empty_afifo1 && wen_afifo1 && dram_ready && dram_wdf_ready);
-    assign dram_addr    = adc_addr;
+    assign dram_addr    = adc_axi_addr;
     assign dram_din     = dout_afifo1_adc_data;
     assign dram_mask    = adc_merged_mask;
 
