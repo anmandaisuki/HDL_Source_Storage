@@ -1,6 +1,6 @@
-module fifo_async #(
+module FIFO_ASYNC #(
     parameter DATA_WIDTH = 512,
-    parameter ADDR_WIDTH = 8,   // FIFO_DEPTH = 2^ADDR_WIDTH
+    parameter ADDR_WIDTH = 8   // FIFO_DEPTH = 2^ADDR_WIDTH
 ) (
     // Write side (Input Data)
     input wire write_clk,
@@ -16,7 +16,7 @@ module fifo_async #(
     input wire read_en,
 
     output wire [DATA_WIDTH-1:0] data_out,
-    output wire full,
+    output wire full
 );
 
 reg [DATA_WIDTH-1 : 0] async_fifo[(2**ADDR_WIDTH)-1 : 0];

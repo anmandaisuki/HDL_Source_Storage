@@ -16,7 +16,7 @@ module MIGUI #(
     output wire o_data_valid,
     output wire o_ready,
     output wire o_wdf_ready,
-    output wire o_init_calib_complete,
+    output wire o_init_calib_complete,// DRAM calibration/initialization process is done and now DRAM is ready.  
 
     output wire [APP_ADDR_WIDTH-1:0] app_addr,
     output wire [APP_CMD_WIDTH-1:0] app_cmd,
@@ -53,7 +53,7 @@ assign o_data = app_rd_data;
 assign o_data_valid = app_rd_data_valid;
 assign o_ready = app_rdy;
 assign o_wdf_ready = app_wdf_rdy;
-assign o_init_calib_comlete = i_init_calib_complete;
+assign o_init_calib_complete = i_init_calib_complete;
 
 assign app_addr = addr;
 assign app_cmd = cmd;

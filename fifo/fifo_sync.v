@@ -1,6 +1,6 @@
-module fifo_sync #(
+module FIFO_SYNC #(
     parameter DATA_WIDTH = 512,
-    parameter ADDR_WIDTH = 8, // FIFO_DEPTH = 2^ADDR_WIDTH
+    parameter ADDR_WIDTH = 8 // FIFO_DEPTH = 2^ADDR_WIDTH
 ) (
      input  wire                    clk,
      input  wire                    i_rst,
@@ -20,9 +20,8 @@ reg[ADDR_WIDTH:0] w_pnt; // write pointer(ring buffer)
 assign o_empty = (w_pnt == r_pnt);
 assign o_full = (w_pnt[ADDR_WIDTH]!= r_pnt[ADDR_WIDTH] && w_pnt[ADDR_WIDTH-1:0]==r_pnt[ADDR_WIDTH-1:0]);
 
-wire [DATA_WIDTH-1:0] read_data_from_fifo;
+reg [DATA_WIDTH-1:0] read_data_from_fifo;
 assign o_data = read_data_from_fifo;
-assign read_data_from_fifo = FIFO[r_pnt[ADDR_WIDTH-1:0]];
 
 always @(posedge clk ) begin
     if (i_rst) begin
@@ -31,7 +30,7 @@ always @(posedge clk ) begin
     end else begin
         if(i_wen)begin
             w_pnt <= w_pnt + 1;
-            FIFO[[w_pnt[ADDR_WIDTH-1:0]]] <= i_data;
+            FIFO[w_pnt[ADDR_WIDTH-1:0]] <= i_data;
         end
         if (i_ren) begin
             r_pnt <= r_pnt + 1;
