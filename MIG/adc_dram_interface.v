@@ -13,8 +13,10 @@ module ADC_IN_AXIS_OUT_DRAM_INTERFACE #(
     parameter ADC_DATA_WIDTH    = 8  ,
     parameter ADC_CLK_WIDTH     = 1  , // 1: single_end, 2: differential
     parameter DDR3_BURST_LENGTH = 8  ,
+    parameter DDR3_CELL_SIZE    = 16 , // cell size (bit) DATA WIDTH of DRAM. 
 
-    parameter AXIS_DATA_WIDTH   = 32 
+    parameter AXI_DATA_WIDTH    = 32 ,
+    parameter AXI_ARSIZE        = 32
 
 ) (
     input wire sys_clk, // clk for MIG input to generate MIG freq. Refer MIG GUI tool 
@@ -206,11 +208,11 @@ module ADC_IN_AXIS_OUT_DRAM_INTERFACE #(
    
 
    S_AXI_CONVERSION #(
-                    .WDATA_WIDTH  (32)   ,
-                    .RDATA_WIDTH  (32)   ,
-                    .ADDR_WIDTH   (8 )   ,   // ADDR_DEPTH = 2**ADDR_WIDTH
-                    .BURST_LENGTH (8 )   ,   // 2**8 = 256 is Max burst length. Burst transaction for AXI is up to 256. 
-                    .ID_LENGTH    (4 )   ,
+                    .WDATA_WIDTH  (AXI_DATA_WIDTH)   ,
+                    .RDATA_WIDTH  (AXI_DATA_WIDTH)   ,
+                    .ADDR_WIDTH   (8 )               ,   // ADDR_DEPTH = 2**ADDR_WIDTH
+                    .BURST_LENGTH (8 )               ,   // 2**8 = 256 is Max burst length. Burst transaction for AXI is up to 256. 
+                    .ID_LENGTH    (4 )               ,
                     .BUFF_DEPTH   (10)   )
     s_axi_conversion (
     // AXI Interface
@@ -248,11 +250,11 @@ module ADC_IN_AXIS_OUT_DRAM_INTERFACE #(
                     .S_AXI_BREADY(S_AXI_BREADY),
                     .S_AXI_BRESP (S_AXI_BRESP ),   //00:OKAY, 01:EXOKEY, 10:SLVERR, 11:DECERR
     // User Interface (Modify by yourself depends on the application.)
-                    .ADDRESS_FROM_AXI(adc_axi_addr),
-                    .DATA_TO_AXI     (data_to_axi),
-                    .DATA_VALID      (),
-                    .DATA_READY      (axi_read_ready), 
-                    .BURST_NUM       (axi_burst_num));
+                    .ADDRESS_FROM_AXI(address_from_axi),
+                    .DATA_TO_AXI     (data_to_axi     ), // 32bit, AXI bus width
+                    .DATA_VALID      (data_valid      ),
+                    .DATA_READY      (axi_read_ready  ), 
+                    .BURST_NUM       (axi_burst_num   )); // data size is 32 bit 
 
 
     // rst_async 0 at stable status.  Stable conditoin made then one clock later, Write FIFO starts accepting data. 1 clock gap is for safety of transaction. 
@@ -292,39 +294,67 @@ module ADC_IN_AXIS_OUT_DRAM_INTERFACE #(
     //     end       
     // end
 
-    wire [32-1:0]data_to_axi;
-    wire axi_burst_num;
-    wire axi_read_ready;
+    wire[7:0] axi_burst_num   ;
+    wire      axi_read_ready  ;
+    wire      address_from_axi;
+
+    integer i;
+    reg [APP_DATA_WIDTH-AXI_DATA_WIDTH-1:0] dummy;
+    localparam mig_data_divide_num = $clog2((DDR3_BURST_LENGTH*DDR3_CELL_SIZE/AXI_DATA_WIDTH)+1);
+
+    reg [AXI_DATA_WIDTH-1:0]        data_to_axi    ;
+    reg                             data_valid     ;
+    reg [7:0]                       burst_cnt      ; // to count axi burst transaction
+    reg [mig_data_divide_num-1:0]   data_divide_cnt; // to divide mig data output
+    reg [AXI_DATA_WIDTH-1:0]        tmp_data_to_axi[(DDR3_BURST_LENGTH*DDR3_CELL_SIZE/AXI_DATA_WIDTH)-1:0];
+    reg [AXI_DATA_WIDTH-1:0]        current_burst_addr;
+    reg [7:0]                       current_burst_num ;
+
     assign dram_wen = axi_read_ready; // When axi reads DRAM, ADC write is disabled. 
-    
-
-    wire [32-1:0] burst_data0;
-    wire [32-1:0] burst_data1;
-    wire [32-1:0] burst_data2;
-    wire [32-1:0] burst_data3;
-    assign burst_data0 = tmp_data_to_axi[31:0];
-    assign burst_data1 = tmp_data_to_axi[63:32];
-    assign burst_data2 = tmp_data_to_axi[95:64];
-    assign burst_data3 = tmp_data_to_axi[127:96];
-
-    reg [7:0] burst_cnt;
-    reg [APP_DATA_WIDTH-1:0] tmp_data_to_axi;
+    assign adc_axi_addr = {[APP_ADDR_WIDTH-2:mig_data_divide_num]current_burst_addr, mig_data_divide_num{1'b0}};
 
     always @(posedge S_AXI_ACLK) begin
         if(!S_AXI_ARESETN)begin
-            burst_cnt <= 0;
+            data_to_axi       <= 0;
+            burst_cnt         <= 0;
+            data_divide_cnt   <= 0;
+            tmp_data_to_axi   <= 0;
+            current_burst_addr<= 0;
+            current_burst_num <= 0;
         end else begin
-            if(axi_read_ready && burst_cnt == 0)begin
-                tmp_data_to_axi <= dout_afifo2;
-            end
-
-            if(axi_read_ready)begin
-                if(0 < burst_cnt < axi_burst_num )
-                    burst_cnt <= burst_cnt + 1;
-                end else if (burst_cnt == axi_burst_num) begin
-                    burst_cnt <= 0;
+            if(axi_read_ready && burst_cnt == 0 && !empty_afifo2)begin // axi_read_ready(ren_afifo2) is H, burst_cnt = 0 (burst starts)
+                for (i = 0; i < (DDR3_BURST_LENGTH*DDR3_CELL_SIZE/AXI_DATA_WIDTH) ; i=i+1 ) begin
+                    {dummy,tmp_data_to_axi[i]}<=(AXI_DATA_WIDTH*i>>dout_afifo2)     ;
+                end
+                data_to_axi             <= [AXI_DATA_WIDTH-1:0]dout_afifo2          ; 
+                data_valid              <= 1'b1                                     ;
+                burst_cnt               <= burst_cnt + AXI_DATA_WIDTH/AXI_ARSIZE    ; 
+                data_divide_cnt         <= data_divide_cnt + 1                      ;
+                current_burst_addr      <= address_from_axi                         ;
+                current_burst_num       <= axi_burst_num                            ;
+            end else begin
+                if(axi_read_ready && !empty_afifo2)begin
+                    if(0 < burst_cnt < current_burst_num - 1) begin
+                        data_to_axi             <= tmp_data_to_axi[data_divide_cnt]      ;
+                        data_valid              <= 1'b1                                  ;
+                        if(data_divide_cnt ==(DDR3_BURST_LENGTH*DDR3_CELL_SIZE/AXI_DATA_WIDTH)-1)begin
+                            data_divide_cnt     <=  0                                    ;
+                            current_burst_addr  <= current_burst_addr + DDR3_BURST_LENGTH;
+                        end else begin
+                            data_divide_cnt     <= data_divide_cnt + 1                   ; 
+                        end
+                        burst_cnt               <= burst_cnt + AXI_DATA_WIDTH/AXI_ARSIZE ; 
+                    end else if (burst_cnt >= axi_burst_num - 1) begin // the last data in the burst transaction. 
+                        data_to_axi             <= tmp_data_to_axi[data_divide_cnt]      ;
+                        data_valid              <= 1'b1                                  ;
+                        burst_cnt               <= 0                                     ;
+                        data_divide_cnt         <= 0                                     ;
+                    end
+                end else begin
+                        data_valid <= 0; // the case if empty_afifo is H 
                 end
             end
+        end
     end
 
     assign ren_afifo2 = axi_read_ready;
