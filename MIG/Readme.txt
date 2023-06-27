@@ -39,6 +39,7 @@ migのuser側の信号の説明（全部で10ポート）
 	3. system clock : input clock period をどこから取るかで、内部生成する場合はnobuffer. 	4. reference clock : input clock　period以外に参照用に200MHzのクロックが必要でどこから取るか。
 	つまり実際に用意しなくてはいけないクロックは200MHz(参照用)とinput clock（mig動作周波数を作るためのクロック）。migの動作クロックは直接は入力せずsys_clkに入力して、内部で生成する。
 	migが出力するui_clkはユーザーインターフェイス用に出力してくれてるけど、このままだと使いづらいので、fifo_asyncとclk_wizardを使用して、周波数変換と非同期データ交換を行う。
+	mig_ui_clkは1のclock period(migの動作周波数)の1/4がデフォルトになっている。動作周波数を400MHzとしたら、100MHzが出力される。(1/4を変えられるかは不明。)
 	
 dram.vについて
 	おそらくreadとwrite両方同時にできないようになってる？!dout_afifo1_wenのときに、dram_renがアサートされるようになってる。
@@ -52,5 +53,9 @@ adc_dram_interface.vについて
 AXIとDRAMのアドレスについて
 	AXIのアドレスは常に8bit(1byte)ごと。DRAMのアドレスはセルの大きさによる。セルが16bitの場合、2byteごとに1つのアドレスとなる。
 	ARSIZEはAXIバスよりも小さくなる。ARSIZEが32bitでAXIバス幅が64bitかもしれない？この場合１クロックで２データ送れることになる。
+
+動作条件
+	APP_DATA_WIDTH > AXI_DATA_WIDTHかつAPP_DATA_WIDTH/AXI_DATA_WIDTHが割り切れる条件でないといけない。ただ、おそらくだいたいの場合大丈夫。
+	おそらく普通APP_DATA_WIDTHは128bitでAXI_DATA_WIDTHは16,32,64,128bitだから。
 
 
