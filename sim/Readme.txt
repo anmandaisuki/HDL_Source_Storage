@@ -21,12 +21,12 @@ ddr3_model.svの中身は一緒でDRAMによる違いはddr3_model_parateters.vh
 	ddr3_model_parameters.vhはprojectにaddしておく。
 
 DDRの'defineについて（基本、以下の３種類defineしておけばいい）
-	`define x2Gb	// DRAMの容量
+	`define x2Gb	// DRAMの容量(bit)
 	`define sg15E	// speed grade 
 	`define x16	// データ幅。 
 	上の３つ大体すべて型番見ればわかる。
 	ex) MT41K128M16JT-125 
-		128Meg*16 byte  => 'define x2Gb
+		128Meg*16 bit  => 'define x2Gb
 		speed grade 125 => 'define sg125
 		data width      => 'define x16
 
