@@ -1,3 +1,6 @@
+`define ADCCLK_SINGLEEND
+// `define ADCCLK_DIF
+
 module ADC_IN_AXI_OUT_DRAM_INTERFACE #(
     parameter DDR3_DQ_WIDTH     = 16 ,
     parameter DDR3_DQS_WIDTH    = 2  ,
@@ -78,10 +81,15 @@ module ADC_IN_AXI_OUT_DRAM_INTERFACE #(
 
     // ADC write interface
     // Physical and PL interface
+    `ifdef ADCCLK_SINGLEEND
+        output wire                        o_adc_clk,
+        input  wire                        i_adc_clk,
+    `elsif ADCCLK_DIF
         output wire                        o_adc_clk_n, 
         output wire                        o_adc_clk_p, 
         input  wire                        i_adc_clk_n, 
         input  wire                        i_adc_clk_p, 
+    `endif 
         input  wire[ADC_DATA_WIDTH-1:0]    i_adc_data ,
         input  wire                        i_adc_data_en
     );
@@ -166,7 +174,7 @@ module ADC_IN_AXI_OUT_DRAM_INTERFACE #(
                 clk_wiz_0 clkgen_out_to_adc (
                     .clk_in1(mig_ui_clk),
                     .reset(mig_ui_rst),
-                    .clk_out1(o_adc_clk_n),
+                    .clk_out1(o_adc_clk),
                     .locked(locked_a)
                 );
             end
@@ -182,7 +190,7 @@ module ADC_IN_AXI_OUT_DRAM_INTERFACE #(
             1: begin
                 // phase is also need to be adjusted between i_adc_clk and o_adc_clk
                 clk_wiz_0 clkgen_in_from_adc (
-                    .clk_in1(i_adc_clk_n),
+                    .clk_in1(i_adc_clk),
                     .reset(mig_ui_rst),
                     .clk_out1(adc_clk),
                     .locked(locked_b)
